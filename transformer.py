@@ -1,17 +1,19 @@
-
+# imagebind mindspore
 import copy
 import fnmatch
 import logging
 from functools import partial
 from typing import Callable, List
 
+import numpy as np
 
 import mindspore as ms
-from mindspore import nn, ops
-
-# TODO
-# from timm.models.layers import DropPath, trunc_normal_
-
+from mindspore import nn, ops, Parameter, Tensor
+from mindspore.common.initializer import (
+    Constant,
+    TruncatedNormal,
+    initializer,
+)
 
 class Attention(nn.Cell):
     """
@@ -47,9 +49,10 @@ class Attention(nn.Cell):
 
         self.qkv = nn.Dense(dim, dim * 3, has_bias=qkv_bias)
 
-        self.attn_drop = Dropout(attn_drop)
+        # TODO: align dropout params.
+        self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Dense(dim, dim)
-        self.proj_drop = Dropout(proj_drop)
+        self.proj_drop = nn.Dropout(proj_drop)
 
         self.mul = ops.Mul()
         self.reshape = ops.Reshape()
@@ -137,11 +140,10 @@ class BlockWithMasking(nn.Cell):
         ), "attn_target should be a Callable. Otherwise attn_target is shared across blocks!"
         self.attn = attn_target()
 
-        # TODO
-        # if drop_path > 0.0:
-        #     self.drop_path = DropPath(drop_path)
-        # else:
-        #     self.drop_path = nn.Identity()
+        if drop_path > 0.0:
+            self.drop_path = DropPath(drop_path)
+        else:
+            self.drop_path = nn.Identity()
         self.drop_path = nn.Identity()
 
         self.norm_1 = norm_layer(dim)
@@ -208,28 +210,19 @@ class SimpleTransformer(nn.Cell):
         ffn_dropout_rate: float = 0.0,
         layer_scale_type: str = None,  # from cait; possible values are None, "per_channel", "scalar"
         layer_scale_init_value: float = 1e-4,  # from cait; float
-        weight_init_style: str = "jax",  # possible values jax or pytorch
     ):
-        """
-        Simple Transformer with the following features
-        1. Supports masked attention
-        2. Supports DropPath
-        3. Supports LayerScale
-        4. Supports Dropout in Attention and FFN
-        5. Makes few assumptions about the input except that it is a Tensor
-        """
+
         super().__init__()
         self.pre_transformer_layer = pre_transformer_layer
 
-        # TODO
-        # if drop_path_type == "progressive":
-        #     dpr = [x.item() for x in torch.linspace(0, drop_path_rate, num_blocks)]
-        # elif drop_path_type == "uniform":
-        #     dpr = [drop_path_rate for i in range(num_blocks)]
-        # else:
-        #     raise ValueError(f"Unknown drop_path_type: {drop_path_type}")
+        if drop_path_type == "progressive":
+            dpr = [x.item() for x in np.linspace(0, drop_path_rate, num_blocks)]
+        elif drop_path_type == "uniform":
+            dpr = [drop_path_rate for i in range(num_blocks)]
+        else:
+            raise ValueError(f"Unknown drop_path_type: {drop_path_type}")
 
-        self.blocks = nn.Sequential(
+        self.blocks = nn.SequentialCell(
             *[
                 block(
                     dim=embed_dim,
@@ -245,23 +238,16 @@ class SimpleTransformer(nn.Cell):
             ]
         )
         self.post_transformer_layer = post_transformer_layer
-        self.weight_init_style = weight_init_style
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Dense):
-            if self.weight_init_style == "jax":
-                # Based on MAE and official Jax ViT implementation
-                torch.nn.init.xavier_uniform_(m.weight)
-            elif self.weight_init_style == "pytorch":
-                # PyTorch ViT uses trunc_normal_
-                trunc_normal_(m.weight, std=0.02)
-
+            trunc_normal_(m.weight, std=0.02)
             if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
+                constant_(m.bias, 0)
         elif isinstance(m, (nn.LayerNorm)):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+            constant_(m.bias, 0)
+            constant_(m.weight, 1.0)
 
     def construct(
         self,
@@ -299,3 +285,32 @@ class SimpleTransformer(nn.Cell):
         if self.post_transformer_layer:
             tokens = self.post_transformer_layer(tokens)
         return tokens
+
+def trunc_normal_(tensor: Parameter, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0) -> None:
+    tensor.set_data(initializer(TruncatedNormal(std, mean, a, b), tensor.shape, tensor.dtype))
+
+
+def constant_(tensor: Parameter, val: float) -> None:
+    tensor.set_data(initializer(Constant(val), tensor.shape, tensor.dtype))
+
+class DropPath(nn.Cell):
+"""DropPath (Stochastic Depth) regularization layers"""
+
+    def __init__(
+        self,
+        drop_prob: float = 0.0,
+        scale_by_keep: bool = True,
+    ) -> None:
+        super().__init__()
+        self.keep_prob = 1.0 - drop_prob
+        self.scale_by_keep = scale_by_keep
+        self.dropout = nn.Dropout(p=drop_prob)
+
+    def construct(self, x: Tensor) -> Tensor:
+        if self.keep_prob == 1.0 or not self.training:
+            return x
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = self.dropout(ones(shape))
+        if not self.scale_by_keep:
+            random_tensor = ops.mul(random_tensor, self.keep_prob)
+        return x * random_tensor
