@@ -7,6 +7,16 @@ import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
 
+from mindspore.common.initializer import (
+    Constant,
+    Normal,
+    One,
+    TruncatedNormal,
+    XavierNormal,
+    XavierUniform,
+    Zero,
+    initializer,
+)
 
 # TODO
 # class Normalize(nn.Cell):
@@ -16,6 +26,8 @@ from mindspore import nn, ops
 
 #     def construct(self, x):
 #         return torch.nn.functional.normalize(x, dim=self.dim, p=2)
+
+
 
 
 class LearnableLogitScaling(nn.Cell):
@@ -134,3 +146,37 @@ class SelectEOSAndProject(nn.Cell):
         x = x[ops.arange(x.shape[0]), seq_len]
         x = self.proj(x)
         return x
+
+def trunc_normal_(tensor: Parameter, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0) -> None:
+    tensor.set_data(initializer(TruncatedNormal(std, mean, a, b), tensor.shape, tensor.dtype))
+
+def constant_(tensor: Parameter, val: float) -> None:
+    tensor.set_data(initializer(Constant(val), tensor.shape, tensor.dtype))
+
+def normal_(tensor: Parameter, mean: float = 0.0, std: float = 1.0) -> None:
+    tensor.set_data(initializer(Normal(std, mean), tensor.shape, tensor.dtype))
+
+def zeros_(tensor: Parameter) -> None:
+    tensor.set_data(initializer(Zero(), tensor.shape, tensor.dtype))
+
+class DropPath(nn.Cell):
+"""DropPath (Stochastic Depth) regularization layers"""
+
+    def __init__(
+        self,
+        drop_prob: float = 0.0,
+        scale_by_keep: bool = True,
+    ) -> None:
+        super().__init__()
+        self.keep_prob = 1.0 - drop_prob
+        self.scale_by_keep = scale_by_keep
+        self.dropout = nn.Dropout(p=drop_prob)
+
+    def construct(self, x: Tensor) -> Tensor:
+        if self.keep_prob == 1.0 or not self.training:
+            return x
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = self.dropout(ones(shape))
+        if not self.scale_by_keep:
+            random_tensor = ops.mul(random_tensor, self.keep_prob)
+        return x * random_tensor

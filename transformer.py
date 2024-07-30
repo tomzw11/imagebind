@@ -15,6 +15,8 @@ from mindspore.common.initializer import (
     initializer,
 )
 
+from .helpers import DropPath, constant_, trunc_normal_
+
 class Attention(nn.Cell):
     """
     Attention layer implementation, Rearrange Input -> B x N x hidden size.
@@ -286,31 +288,4 @@ class SimpleTransformer(nn.Cell):
             tokens = self.post_transformer_layer(tokens)
         return tokens
 
-def trunc_normal_(tensor: Parameter, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0) -> None:
-    tensor.set_data(initializer(TruncatedNormal(std, mean, a, b), tensor.shape, tensor.dtype))
 
-
-def constant_(tensor: Parameter, val: float) -> None:
-    tensor.set_data(initializer(Constant(val), tensor.shape, tensor.dtype))
-
-class DropPath(nn.Cell):
-"""DropPath (Stochastic Depth) regularization layers"""
-
-    def __init__(
-        self,
-        drop_prob: float = 0.0,
-        scale_by_keep: bool = True,
-    ) -> None:
-        super().__init__()
-        self.keep_prob = 1.0 - drop_prob
-        self.scale_by_keep = scale_by_keep
-        self.dropout = nn.Dropout(p=drop_prob)
-
-    def construct(self, x: Tensor) -> Tensor:
-        if self.keep_prob == 1.0 or not self.training:
-            return x
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = self.dropout(ones(shape))
-        if not self.scale_by_keep:
-            random_tensor = ops.mul(random_tensor, self.keep_prob)
-        return x * random_tensor
