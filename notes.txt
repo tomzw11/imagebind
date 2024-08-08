@@ -28,6 +28,7 @@ helpers.py
 	normal_(mindone.models.utils)
 	zeros_(mindone.models.utils)
 	DropPath
+		to activate need self.dropout.training=True
 
 multimodal_preprocess.py
 	get_sinusoid_encoding_table

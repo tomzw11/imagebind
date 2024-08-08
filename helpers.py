@@ -5,7 +5,7 @@ import einops
 import numpy as np
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, Parameter, Tensor
 
 from mindspore.common.initializer import (
     Constant,
@@ -26,8 +26,6 @@ from mindspore.common.initializer import (
 
 #     def construct(self, x):
 #         return torch.nn.functional.normalize(x, dim=self.dim, p=2)
-
-
 
 
 class LearnableLogitScaling(nn.Cell):
@@ -160,7 +158,6 @@ def zeros_(tensor: Parameter) -> None:
     tensor.set_data(initializer(Zero(), tensor.shape, tensor.dtype))
 
 class DropPath(nn.Cell):
-"""DropPath (Stochastic Depth) regularization layers"""
 
     def __init__(
         self,

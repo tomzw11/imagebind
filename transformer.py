@@ -15,7 +15,7 @@ from mindspore.common.initializer import (
     initializer,
 )
 
-from .helpers import DropPath, constant_, trunc_normal_
+from helpers import DropPath, constant_, trunc_normal_
 
 class Attention(nn.Cell):
     """
@@ -39,8 +39,8 @@ class Attention(nn.Cell):
         num_heads: int = 8,
         qkv_bias: bool = True,
         qk_norm: bool = False,
-        attn_drop: float = 0.0,
-        proj_drop: float = 0.0,
+        attn_drop: float = 0.5,
+        proj_drop: float = 0.5,
         norm_layer: nn.Cell = nn.LayerNorm,
     ):
         super(Attention, self).__init__()
@@ -111,9 +111,10 @@ class Mlp(nn.Cell):
         return x
 
 
-class MultiheadAttention(nn.MultiheadAttention):
-    def construct(self, x: ms.Tensor, attn_mask: ms.Tensor):
-        return super().construct(x, x, x, need_weights=False, attn_mask=attn_mask)[0]
+# use nn.mha instead
+# class MultiheadAttention(nn.MultiheadAttention):
+#     def construct(self, x: ms.Tensor, attn_mask: ms.Tensor):
+#         return super().construct(x, x, x, need_weights=False, attn_mask=attn_mask)[0]
 
 
 class ViTAttention(Attention):
@@ -137,9 +138,6 @@ class BlockWithMasking(nn.Cell):
     ):
         super().__init__()
 
-        assert not isinstance(
-            attn_target, nn.Cell
-        ), "attn_target should be a Callable. Otherwise attn_target is shared across blocks!"
         self.attn = attn_target()
 
         if drop_path > 0.0:
@@ -148,7 +146,7 @@ class BlockWithMasking(nn.Cell):
             self.drop_path = nn.Identity()
         self.drop_path = nn.Identity()
 
-        self.norm_1 = norm_layer(dim)
+        self.norm_1 = norm_layer((dim,))
         mlp_hidden_dim = int(mlp_ratio * dim)
         self.mlp = Mlp(
             in_features=dim,
@@ -156,7 +154,7 @@ class BlockWithMasking(nn.Cell):
             act_layer=act_layer,
             drop=ffn_dropout_rate,
         )
-        self.norm_2 = norm_layer(dim)
+        self.norm_2 = norm_layer((dim,))
         self.layer_scale_type = layer_scale_type
         if self.layer_scale_type is not None:
             assert self.layer_scale_type in [
@@ -180,20 +178,22 @@ class BlockWithMasking(nn.Cell):
             )
 
     def construct(self, x: ms.Tensor, attn_mask: ms.Tensor):
+        norm_1_x = self.norm_1(x)
+        norm_2_x = self.norm_2(x)
         if self.layer_scale_type is None:
-            x = x + self.drop_path(self.attn(self.norm_1(x), attn_mask))
-            x = x + self.drop_path(self.mlp(self.norm_2(x)))
+            x = x + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask))
+            x = x + self.drop_path(self.mlp(norm_2_x))
         else:
             x = (
                 x
-                + self.drop_path(self.attn(self.norm_1(x), attn_mask))
+                + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask))
                 * self.layer_scale_gamma1
             )
-            x = x + self.drop_path(self.mlp(self.norm_2(x))) * self.layer_scale_gamma2
+            x = x + self.drop_path(self.mlp(norm_2_x)) * self.layer_scale_gamma2
         return x
 
 
-_LAYER_NORM = partial(nn.LayerNorm, eps=1e-6)
+_LAYER_NORM = partial(nn.LayerNorm, epsilon=1e-6)
 
 
 class SimpleTransformer(nn.Cell):
@@ -205,11 +205,11 @@ class SimpleTransformer(nn.Cell):
         block: Callable = BlockWithMasking,
         pre_transformer_layer: Callable = None,
         post_transformer_layer: Callable = None,
-        drop_path_rate: float = 0.0,
+        drop_path_rate: float = 0.5,
         drop_path_type: str = "progressive",
         norm_layer: Callable = _LAYER_NORM,
         mlp_ratio: int = 4,
-        ffn_dropout_rate: float = 0.0,
+        ffn_dropout_rate: float = 0.5,
         layer_scale_type: str = None,  # from cait; possible values are None, "per_channel", "scalar"
         layer_scale_init_value: float = 1e-4,  # from cait; float
     ):
@@ -248,8 +248,8 @@ class SimpleTransformer(nn.Cell):
             if m.bias is not None:
                 constant_(m.bias, 0)
         elif isinstance(m, (nn.LayerNorm)):
-            constant_(m.bias, 0)
-            constant_(m.weight, 1.0)
+            constant_(m.beta, 0)
+            constant_(m.gamma, 1.0)
 
     def construct(
         self,
