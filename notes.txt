@@ -14,7 +14,8 @@ transformer.py
 
 helpers.py
 	Normalize
-		1）后处理模块norm，需要单独迁移
+		后处理模块norm，需要单独迁移
+		adapted from mindone https://github.com/mindspore-lab/mindone/blob/master/examples/stable_diffusion_xl/gm/modules/util.py
 	LearnableLogitScaling
 	EinOpsRearrange
 		1) 待确认是否迁移
@@ -28,6 +29,7 @@ helpers.py
 	normal_(mindone.models.utils)
 	zeros_(mindone.models.utils)
 	DropPath
+		adapted from mindone droppath module
 		to activate need self.dropout.training=True
 
 multimodal_preprocess.py
