@@ -100,7 +100,7 @@ class Mlp(nn.Cell):
         self.fc1 = nn.Dense(in_features, hidden_features)
         self.act = act_layer()
         self.fc2 = nn.Dense(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.drop = nn.Dropout(p=drop)
 
     def construct(self, x):
         x = self.fc1(x)
@@ -109,12 +109,6 @@ class Mlp(nn.Cell):
         x = self.fc2(x)
         x = self.drop(x)
         return x
-
-
-# use nn.mha instead
-# class MultiheadAttention(nn.MultiheadAttention):
-#     def construct(self, x: ms.Tensor, attn_mask: ms.Tensor):
-#         return super().construct(x, x, x, need_weights=False, attn_mask=attn_mask)[0]
 
 
 class ViTAttention(Attention):

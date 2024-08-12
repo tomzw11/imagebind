@@ -7,14 +7,14 @@ from types import SimpleNamespace
 import mindspore as ms
 from mindspore import ops, nn
 
-from .helpers import (
+from helpers import (
     EinOpsRearrange,
     LearnableLogitScaling,
     Normalize,
     SelectElement,
     SelectEOSAndProject,
 )
-from .multimodal_preprocessors import (
+from multimodal_preprocessors import (
     AudioPreprocessor,
     IMUPreprocessor,
     PadIm2Video,
@@ -25,7 +25,7 @@ from .multimodal_preprocessors import (
     ThermalPreprocessor,
 )
 
-from .transformer import MultiheadAttention, SimpleTransformer
+from transformer import MultiheadAttention, SimpleTransformer
 
 
 ModalityType = SimpleNamespace(
@@ -157,7 +157,7 @@ class ImageBindModel(nn.Cell):
                     kernel_size=kernel_size,
                     out_channels=vision_embed_dim,
                     stride=kernel_size,
-                    bias=False,
+                    has_bias=False,
                 ),
             ]
         )
@@ -183,10 +183,10 @@ class ImageBindModel(nn.Cell):
                     kernel_size=audio_kernel_size,
                     stride=audio_stride,
                     out_channels=audio_embed_dim,
-                    bias=False,
+                    has_bias=False,
                 ),
             ],
-            norm_layer=nn.LayerNorm(normalized_shape=audio_embed_dim),
+            norm_layer=nn.LayerNorm(normalized_shape=(audio_embed_dim,)),
         )
         audio_preprocessor = AudioPreprocessor(
             img_size=[1, audio_num_mel_bins, audio_target_len],
@@ -202,10 +202,10 @@ class ImageBindModel(nn.Cell):
                     in_channels=1,
                     out_channels=depth_embed_dim,
                     stride=depth_kernel_size,
-                    bias=False,
+                    has_bias=False,
                 ),
             ],
-            norm_layer=nn.LayerNorm(normalized_shape=depth_embed_dim),
+            norm_layer=nn.LayerNorm(normalized_shape=(depth_embed_dim,)),
         )
 
         depth_preprocessor = RGBDTPreprocessor(
@@ -223,10 +223,10 @@ class ImageBindModel(nn.Cell):
                     in_channels=1,
                     out_channels=thermal_embed_dim,
                     stride=thermal_kernel_size,
-                    bias=False,
+                    has_bias=False,
                 ),
             ],
-            norm_layer=nn.LayerNorm(normalized_shape=thermal_embed_dim),
+            norm_layer=nn.LayerNorm(normalized_shape=(thermal_embed_dim,)),
         )
         thermal_preprocessor = ThermalPreprocessor(
             img_size=[1, 224, 224],
@@ -237,13 +237,13 @@ class ImageBindModel(nn.Cell):
 
         imu_stem = PatchEmbedGeneric(
             [
-                nn.Linear(
+                nn.Dense(
                     in_features=48,
                     out_features=imu_embed_dim,
-                    bias=False,
+                    has_bias=False,
                 ),
             ],
-            norm_layer=nn.LayerNorm(normalized_shape=imu_embed_dim),
+            norm_layer=nn.LayerNorm(normalized_shape=(imu_embed_dim,)),
         )
 
         imu_preprocessor = IMUPreprocessor(
@@ -299,15 +299,14 @@ class ImageBindModel(nn.Cell):
                 num_blocks=num_blocks,
                 ffn_dropout_rate=0.0,
                 drop_path_rate=drop_path,
-                attn_target=partial(
-                    MultiheadAttention,
+                attn_target=nn.MultiheadAttention(
                     embed_dim=embed_dim,
                     num_heads=num_heads,
-                    bias=True,
+                    has_bias=True,
                     add_bias_kv=add_bias_kv,
                 ),
                 pre_transformer_layer=nn.SequentialCell(
-                    nn.LayerNorm(embed_dim, eps=1e-6)
+                    nn.LayerNorm(embed_dim, epsilon=1e-6)
                     if pre_transformer_ln
                     else nn.Identity(),
                     EinOpsRearrange("b l d -> l b d"),
@@ -380,41 +379,41 @@ class ImageBindModel(nn.Cell):
         modality_heads = {}
 
         modality_heads[ModalityType.VISION] = nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=vision_embed_dim, eps=1e-6),
+            nn.LayerNorm(normalized_shape=vision_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(vision_embed_dim, out_embed_dim, bias=False),
+            nn.Linear(vision_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.TEXT] = SelectEOSAndProject(
             proj=nn.SequentialCell(
-                nn.LayerNorm(normalized_shape=text_embed_dim, eps=1e-6),
-                nn.Linear(text_embed_dim, out_embed_dim, bias=False),
+                nn.LayerNorm(normalized_shape=text_embed_dim, epsilon=1e-6),
+                nn.Linear(text_embed_dim, out_embed_dim, has_bias=False),
             )
         )
 
         modality_heads[ModalityType.AUDIO] = nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=audio_embed_dim, eps=1e-6),
+            nn.LayerNorm(normalized_shape=audio_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(audio_embed_dim, out_embed_dim, bias=False),
+            nn.Linear(audio_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.DEPTH] = nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=depth_embed_dim, eps=1e-6),
+            nn.LayerNorm(normalized_shape=depth_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(depth_embed_dim, out_embed_dim, bias=False),
+            nn.Linear(depth_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.THERMAL] = nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=thermal_embed_dim, eps=1e-6),
+            nn.LayerNorm(normalized_shape=thermal_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(thermal_embed_dim, out_embed_dim, bias=False),
+            nn.Linear(thermal_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.IMU] = nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=imu_embed_dim, eps=1e-6),
+            nn.LayerNorm(normalized_shape=imu_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
             nn.Dropout(p=0.5),
-            nn.Linear(imu_embed_dim, out_embed_dim, bias=False),
+            nn.Linear(imu_embed_dim, out_embed_dim, has_bias=False),
         )
 
         return nn.CellDict(modality_heads)

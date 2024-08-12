@@ -13,10 +13,11 @@ import regex as re
 
 import mindspore as ms
 from mindspore import nn, ops, Tensor, Parameter
-from mindspore import mint
+
+# from mindspore import mint
 
 from iopath.common.file_io import g_pathmgr
-from .helpers import cast_if_src_dtype, VerboseNNModule, trunc_normal_, normal_, zeros_
+from helpers import cast_if_src_dtype, VerboseNNModule, trunc_normal_, normal_, zeros_
 
 
 def get_sinusoid_encoding_table(n_position, d_hid):
@@ -162,7 +163,7 @@ class SpatioTemporalPosEmbeddingHelper(VerboseNNModule):
         self.num_tokens = num_cls_tokens + num_patches
         self.learnable = learnable
         if self.learnable:
-            self.pos_embed = nn.Parameter(ops.zeros(1, self.num_tokens, embed_dim))
+            self.pos_embed = Parameter(ops.zeros(size=(1, self.num_tokens, embed_dim)))
             trunc_normal_(self.pos_embed, std=0.02)
         else:
             pos_embed = Parameter(get_sinusoid_encoding_table(self.num_tokens, embed_dim), requires_grad=False)
@@ -211,11 +212,11 @@ class RGBDTPreprocessor(VerboseNNModule):
                 embed_dim=self.embed_dim,
             )
         if self.num_cls_tokens > 0:
-            self.cls_token = nn.Parameter(
-                ops.zeros(1, self.num_cls_tokens, self.embed_dim)
+            self.cls_token = Parameter(
+                ops.zeros(size=(1, self.num_cls_tokens, self.embed_dim))
             )
         if self.use_type_embed:
-            self.type_embed = nn.Parameter(ops.zeros(1, 1, self.embed_dim))
+            self.type_embed = Parameter(ops.zeros(size=(1, 1, self.embed_dim)))
 
         self.init_parameters(init_param_style)
 
@@ -303,17 +304,10 @@ class ThermalPreprocessor(RGBDTPreprocessor):
 
 def build_causal_attention_mask(context_length):
     # lazily create causal attention mask, with full attention between the vision tokens
-    # pytorch uses additive attention mask; fill with -inf
 
-    # mask = ops.zeros(context_length, context_length, requires_grad=False)
-    # mask.fill_(float("-inf"))
-
-    mask = Parameter(ops.fill(ms.float32, (context_length, context_length), "-inf"), requires_grad=False)
-    
-    # TODO: no ops.triu?
-    # mask.triu_(1)  # zero out the lower diagonal
-    mask = mint.triu(mask, 1)
-    return mask
+    mask = np.ones((context_length, context_length))
+    mask = np.triu(mask * float("-inf"), k=1)
+    return Tensor(mask, ms.float32)
 
 
 class TextPreprocessor(VerboseNNModule):
@@ -332,7 +326,7 @@ class TextPreprocessor(VerboseNNModule):
         self.context_length = context_length
         self.token_embedding = nn.Embedding(vocab_size, embed_dim)
         self.pos_embed = nn.Parameter(
-            ops.zeros(1, self.context_length + num_cls_tokens, embed_dim)
+            ops.zeros(size=(1, self.context_length + num_cls_tokens, embed_dim))
         )
         self.causal_masking = causal_masking
         if self.causal_masking:
@@ -344,14 +338,14 @@ class TextPreprocessor(VerboseNNModule):
         if num_cls_tokens > 0:
             assert self.causal_masking is False, "Masking + CLS token isn't implemented"
             self.cls_token = nn.Parameter(
-                ops.zeros(1, self.num_cls_tokens, embed_dim)
+                ops.zeros(size=(1, self.num_cls_tokens, embed_dim))
             )
 
         self.init_parameters(init_param_style)
 
     def init_parameters(self, init_param_style="openclip"):
         # OpenCLIP style initialization
-        normal_(self.token_embedding.weight, std=0.02)
+        normal_(self.token_embedding.embedding_table, std=0.02)
         normal_(self.pos_embed, std=0.01)
 
         if init_param_style == "openclip":
@@ -583,7 +577,7 @@ class SimpleTokenizer(object):
         sot_token = self.encoder["<|startoftext|>"]
         eot_token = self.encoder["<|endoftext|>"]
         all_tokens = [[sot_token] + self.encode(text) + [eot_token] for text in texts]
-        result = ops.zeros(len(all_tokens), context_length, dtype=ms.int64)
+        result = ops.zeros(size=(len(all_tokens), context_length), dtype=ms.int64)
 
         for i, tokens in enumerate(all_tokens):
             tokens = tokens[:context_length]
@@ -613,12 +607,12 @@ class IMUPreprocessor(VerboseNNModule):
         self.num_cls_tokens = num_cls_tokens
         self.kernel_size = kernel_size
         self.pos_embed = nn.Parameter(
-            ops.zeros(1, (img_size[1] // kernel_size) + num_cls_tokens, embed_dim)
+            ops.zeros(size=(1, (img_size[1] // kernel_size) + num_cls_tokens, embed_dim))
         )
 
         if self.num_cls_tokens > 0:
             self.cls_token = nn.Parameter(
-                ops.zeros(1, self.num_cls_tokens, self.embed_dim)
+                ops.zeros(size=(1, self.num_cls_tokens, self.embed_dim))
             )
 
         self.init_parameters(init_param_style)

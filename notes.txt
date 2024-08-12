@@ -90,4 +90,8 @@ data.py
 
 imagebind_model.py
 	ImageBindModel
+		_create_modality_trucks
+		_create_modality_heads
+		_create_modality_postprocessors
+			nn.celllist不支持保存sequentialcelllist,需要改写
 	imagebind_huge

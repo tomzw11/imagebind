@@ -62,9 +62,9 @@ class LearnableLogitScaling(nn.Cell):
         self.learnable = learnable
         log_logit_scale = ops.ones([]) * np.log(self.logit_scale_init)
         if learnable:
-            self.log_logit_scale = nn.Parameter(log_logit_scale)
+            self.log_logit_scale = Parameter(log_logit_scale)
         else:
-            self.register_buffer("log_logit_scale", log_logit_scale)
+            self.log_logit_scale = Parameter(log_logit_scale， requires_grad=False)
 
     def construct(self, x):
         return ops.clip(self.log_logit_scale.exp(), max=self.max_logit_scale) * x
