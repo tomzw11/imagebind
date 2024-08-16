@@ -140,8 +140,8 @@ class PatchEmbedGeneric(nn.Cell):
 
     def construct(self, x):
         x = self.proj(x)
-        # B C (T_I_V_A.txt) H W -> B (T_I_V_A.txt)HW C
-        x = x.flatten(2).transpose(1, 2)
+        # B C L H W -> B LHW C
+        x = ops.swapaxes(x.flatten(start_dim=2), 1, 2)
         if self.norm_layer is not None:
             x = self.norm_layer(x)
         return x
@@ -171,7 +171,7 @@ class SpatioTemporalPosEmbeddingHelper(VerboseNNModule):
     def get_pos_embedding(self, vision_input, all_vision_tokens):
         input_shape = vision_input.shape
         pos_embed = _get_pos_embedding(
-            all_vision_tokens.size(1) - self.num_cls_tokens,
+            all_vision_tokens.shpae[1] - self.num_cls_tokens,
             pos_embed=self.pos_embed,
             patches_layout=self.patches_layout,
             input_shape=input_shape,
@@ -247,10 +247,10 @@ class RGBDTPreprocessor(VerboseNNModule):
         assert tokens.shape[2] == self.embed_dim
         B = tokens.shape[0]
         if self.num_cls_tokens > 0:
-            class_tokens = self.cls_token.expand(
-                B, -1, -1
+            class_tokens = self.cls_token.broadcast_to(
+                (B, -1, -1)
             )  # stole class_tokens impl from Phil Wang, thanks
-            tokens = ops.cat((class_tokens, tokens), dim=1)
+            tokens = ops.cat((class_tokens, tokens), axis=1)
         if self.use_pos_embed:
             pos_embed = self.pos_embedding_helper.get_pos_embedding(input, tokens)
             tokens = tokens + pos_embed
@@ -330,7 +330,7 @@ class TextPreprocessor(VerboseNNModule):
         )
         self.causal_masking = causal_masking
         if self.causal_masking:
-            mask = Parameter(build_causal_attention_mask(self.context_length), requires_grad=False)
+            self.mask = Parameter(build_causal_attention_mask(self.context_length), requires_grad=False)
 
         self.supply_seq_len_to_head = supply_seq_len_to_head
         self.num_cls_tokens = num_cls_tokens
@@ -369,7 +369,7 @@ class TextPreprocessor(VerboseNNModule):
             class_tokens = self.cls_token.expand(
                 B, -1, -1
             )  # stole class_tokens impl from Phil Wang, thanks
-            text_tokens = ops.cat((class_tokens, text_tokens), dim=1)
+            text_tokens = ops.cat((class_tokens, text_tokens), axis=1)
         text_tokens = text_tokens + self.pos_embed
         return_dict = {
             "trunk": {
@@ -379,7 +379,7 @@ class TextPreprocessor(VerboseNNModule):
         }
         # Compute sequence length after adding CLS tokens
         if self.supply_seq_len_to_head:
-            text_lengths = text.argmax(dim=-1)
+            text_lengths = text.argmax(axis=-1)
             return_dict["head"] = {
                 "seq_len": text_lengths,
             }
@@ -419,7 +419,7 @@ class PadIm2Video(Im2Video):
             if self.pad_type == "repeat":
                 new_shape = [1] * len(x.shape)
                 new_shape[self.time_dim] = self.ntimes
-                x = x.repeat(new_shape)
+                x = x.tile(tuple(new_shape))
             elif self.pad_type == "zero":
                 padarg = [0, 0] * len(x.shape)
                 padarg[2 * self.time_dim + 1] = self.ntimes - x.shape[self.time_dim]

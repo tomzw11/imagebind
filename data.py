@@ -2,19 +2,19 @@
 import math
 
 import mindspore as ms
-from mindspore import nn, ops
+from mindspore import nn, ops, Tensor
 
 import torchaudio
 import logging
 
-from .multimodal_preprocessors import SimpleTokenizer
+from multimodal_preprocessors import SimpleTokenizer
 from PIL import Image
 from pytorchvideo import transforms as pv_transforms
 from pytorchvideo.data.clip_sampling import ConstantClipsPerVideoSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 
-# from torchvision import transforms
-from mindspore.dataset import transforms
+import mindspore.dataset.vision as vision
+import mindspore.dataset.transforms as transforms
 
 from torchvision.transforms._transforms_video import NormalizeVideo
 
@@ -23,43 +23,43 @@ DEFAULT_AUDIO_FRAME_SHIFT_MS = 10  # in milliseconds
 BPE_PATH = "bpe/bpe_simple_vocab_16e6.txt.gz"
 
 
-def waveform2melspec(waveform, sample_rate, num_mel_bins, target_length):
-    # Based on https://github.com/YuanGongND/ast/blob/d7d8b4b8e06cdaeb6c843cdb38794c1c7692234c/src/dataloader.py#L102
-    waveform -= waveform.mean()
-    fbank = torchaudio.compliance.kaldi.fbank(
-        waveform,
-        htk_compat=True,
-        sample_frequency=sample_rate,
-        use_energy=False,
-        window_type="hanning",
-        num_mel_bins=num_mel_bins,
-        dither=0.0,
-        frame_length=25,
-        frame_shift=DEFAULT_AUDIO_FRAME_SHIFT_MS,
-    )
-    # Convert to [mel_bins, num_frames] shape
-    fbank = fbank.transpose(0, 1)
-    # Pad to target_length
-    n_frames = fbank.size(1)
-    p = target_length - n_frames
-    # if p is too large (say >20%), flash a warning
-    if abs(p) / n_frames > 0.2:
-        logging.warning(
-            "Large gap between audio n_frames(%d) and "
-            "target_length (%d). Is the audio_target_length "
-            "setting correct?",
-            n_frames,
-            target_length,
-        )
-    # cut and pad
-    if p > 0:
-        fbank = ops.pad(fbank, (0, p), mode="constant", value=0)
-    elif p < 0:
-        fbank = fbank[:, 0:target_length]
-    # Convert to [1, mel_bins, num_frames] shape, essentially like a 1
-    # channel image
-    fbank = fbank.unsqueeze(0)
-    return fbank
+# def waveform2melspec(waveform, sample_rate, num_mel_bins, target_length):
+    # # Based on https://github.com/YuanGongND/ast/blob/d7d8b4b8e06cdaeb6c843cdb38794c1c7692234c/src/dataloader.py#L102
+    # waveform -= waveform.mean()
+    # fbank = torchaudio.compliance.kaldi.fbank(
+    #     waveform,
+    #     htk_compat=True,
+    #     sample_frequency=sample_rate,
+    #     use_energy=False,
+    #     window_type="hanning",
+    #     num_mel_bins=num_mel_bins,
+    #     dither=0.0,
+    #     frame_length=25,
+    #     frame_shift=DEFAULT_AUDIO_FRAME_SHIFT_MS,
+    # )
+    # # Convert to [mel_bins, num_frames] shape
+    # fbank = fbank.transpose(0, 1)
+    # # Pad to target_length
+    # n_frames = fbank.size(1)
+    # p = target_length - n_frames
+    # # if p is too large (say >20%), flash a warning
+    # if abs(p) / n_frames > 0.2:
+    #     logging.warning(
+    #         "Large gap between audio n_frames(%d) and "
+    #         "target_length (%d). Is the audio_target_length "
+    #         "setting correct?",
+    #         n_frames,
+    #         target_length,
+    #     )
+    # # cut and pad
+    # if p > 0:
+    #     fbank = ops.pad(fbank, (0, p), mode="constant", value=0)
+    # elif p < 0:
+    #     fbank = fbank[:, 0:target_length]
+    # # Convert to [1, mel_bins, num_frames] shape, essentially like a 1
+    # # channel image
+    # fbank = fbank.unsqueeze(0)
+    # return fbank
 
 
 def get_clip_timepoints(clip_sampler, duration):
@@ -73,7 +73,7 @@ def get_clip_timepoints(clip_sampler, duration):
     return all_clips_timepoints
 
 
-def load_and_transform_vision_data(image_paths, device):
+def load_and_transform_vision_data(image_paths):
     if image_paths is None:
         return None
 
@@ -81,14 +81,15 @@ def load_and_transform_vision_data(image_paths, device):
     for image_path in image_paths:
         data_transform = transforms.Compose(
             [
-                transforms.Resize(
-                    224, interpolation=transforms.InterpolationMode.BICUBIC
+                vision.Resize(
+                    224, interpolation=vision.Inter.BICUBIC
                 ),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(
+                vision.CenterCrop(224),
+                vision.ToTensor(),
+                vision.Normalize(
                     mean=(0.48145466, 0.4578275, 0.40821073),
                     std=(0.26862954, 0.26130258, 0.27577711),
+                    is_hwc=False,
                 ),
             ]
         )
@@ -98,9 +99,9 @@ def load_and_transform_vision_data(image_paths, device):
             with open(image_path, "rb") as fopen:
                 image = Image.open(fopen).convert("RGB")
 
-        image = data_transform(image).to(device)
-        image_ouputs.append(image)
-    return ops.stack(image_ouputs, axis=0)
+        image = data_transform(image)
+        image_ouputs.append(Tensor(image))
+    return ops.unsqueeze(image_ouputs[0], 0)
 
 
 def load_and_transform_thermal_data(thermal_paths, device):
@@ -125,18 +126,17 @@ def load_and_transform_thermal_data(thermal_paths, device):
     return ops.stack(thermal_ouputs, axis=0)
 
 
-def load_and_transform_text(text, device):
+def load_and_transform_text(text):
     if text is None:
         return None
     tokenizer = SimpleTokenizer(bpe_path=BPE_PATH)
-    tokens = [tokenizer(t).unsqueeze(0).to(device) for t in text]
+    tokens = [tokenizer(t).unsqueeze(0) for t in text]
     tokens = ops.cat(tokens, axis=0)
     return tokens
 
 
 def load_and_transform_audio_data(
     audio_paths,
-    device,
     num_mel_bins=128,
     target_length=204,
     sample_rate=16000,
@@ -176,7 +176,7 @@ def load_and_transform_audio_data(
             all_clips.append(waveform_melspec)
 
         normalize = transforms.Normalize(mean=mean, std=std)
-        all_clips = [normalize(ac).to(device) for ac in all_clips]
+        all_clips = [normalize(ac) for ac in all_clips]
 
         all_clips = ops.stack(all_clips, axis=0)
         audio_outputs.append(all_clips)
@@ -316,57 +316,57 @@ class SpatialCrop(nn.Cell):
         return res
 
 
-def load_and_transform_video_data(
-    video_paths,
-    device,
-    clip_duration=2,
-    clips_per_video=5,
-    sample_rate=16000,
-):
-    if video_paths is None:
-        return None
+# def load_and_transform_video_data(
+#     video_paths,
+#     device,
+#     clip_duration=2,
+#     clips_per_video=5,
+#     sample_rate=16000,
+# ):
+#     if video_paths is None:
+#         return None
 
-    video_outputs = []
-    video_transform = transforms.Compose(
-        [
-            pv_transforms.ShortSideScale(224),
-            NormalizeVideo(
-                mean=(0.48145466, 0.4578275, 0.40821073),
-                std=(0.26862954, 0.26130258, 0.27577711),
-            ),
-        ]
-    )
+#     video_outputs = []
+#     video_transform = transforms.Compose(
+#         [
+#             pv_transforms.ShortSideScale(224),
+#             NormalizeVideo(
+#                 mean=(0.48145466, 0.4578275, 0.40821073),
+#                 std=(0.26862954, 0.26130258, 0.27577711),
+#             ),
+#         ]
+#     )
 
-    clip_sampler = ConstantClipsPerVideoSampler(
-        clip_duration=clip_duration, clips_per_video=clips_per_video
-    )
-    frame_sampler = pv_transforms.UniformTemporalSubsample(num_samples=clip_duration)
+#     clip_sampler = ConstantClipsPerVideoSampler(
+#         clip_duration=clip_duration, clips_per_video=clips_per_video
+#     )
+#     frame_sampler = pv_transforms.UniformTemporalSubsample(num_samples=clip_duration)
 
-    for video_path in video_paths:
-        video = EncodedVideo.from_path(
-            video_path,
-            decoder="decord",
-            decode_audio=False,
-            # **{"sample_rate": sample_rate},
-        )
+#     for video_path in video_paths:
+#         video = EncodedVideo.from_path(
+#             video_path,
+#             decoder="decord",
+#             decode_audio=False,
+#             # **{"sample_rate": sample_rate},
+#         )
 
-        all_clips_timepoints = get_clip_timepoints(clip_sampler, video.duration)
+#         all_clips_timepoints = get_clip_timepoints(clip_sampler, video.duration)
 
-        all_video = []
-        for clip_timepoints in all_clips_timepoints:
-            # Read the clip, get frames
-            clip = video.get_clip(clip_timepoints[0], clip_timepoints[1])
-            if clip is None:
-                raise ValueError("No clip found")
-            video_clip = frame_sampler(clip["video"])
-            video_clip = video_clip / 255.0  # since this is float, need 0-1
+#         all_video = []
+#         for clip_timepoints in all_clips_timepoints:
+#             # Read the clip, get frames
+#             clip = video.get_clip(clip_timepoints[0], clip_timepoints[1])
+#             if clip is None:
+#                 raise ValueError("No clip found")
+#             video_clip = frame_sampler(clip["video"])
+#             video_clip = video_clip / 255.0  # since this is float, need 0-1
 
-            all_video.append(video_clip)
+#             all_video.append(video_clip)
 
-        all_video = [video_transform(clip) for clip in all_video]
-        all_video = SpatialCrop(224, num_crops=3)(all_video)
+#         all_video = [video_transform(clip) for clip in all_video]
+#         all_video = SpatialCrop(224, num_crops=3)(all_video)
 
-        all_video = ops.stack(all_video, axis=0)
-        video_outputs.append(all_video)
+#         all_video = ops.stack(all_video, axis=0)
+#         video_outputs.append(all_video)
 
-    return ops.stack(video_outputs, axis=0).to(device)
+#     return ops.stack(video_outputs, axis=0).to(device)

@@ -476,7 +476,7 @@ class ImageBindModel(nn.Cell):
 
                 if reduce_list:
                     modality_value = modality_value.reshape(B, S, -1)
-                    modality_value = modality_value.mean(dim=1)
+                    modality_value = modality_value.mean(axis=1)
 
                 outputs[modality_key] = modality_value
 

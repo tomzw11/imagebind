@@ -1,8 +1,8 @@
 import data
 import mindspore as ms
 from mindspore import ops
-from models import imagebind_model
-from models.imagebind_model import ModalityType
+from imagebind_model import imagebind_huge
+from imagebind_model import ModalityType
 
 text_list=["A dog.", "A car", "A bird"]
 image_paths=[".assets/dog_image.jpg", ".assets/car_image.jpg", ".assets/bird_image.jpg"]
@@ -11,14 +11,14 @@ audio_paths=[".assets/dog_audio.wav", ".assets/car_audio.wav", ".assets/bird_aud
 ms.set_context(device_target="CPU")
 
 # Instantiate model
-model = imagebind_model.imagebind_huge(pretrained=True)
-model.eval()
+model = imagebind_huge(pretrained=True)[0]
+model = mode.set_train(mode=False)
 
 # Load data
 inputs = {
-    ModalityType.TEXT: data.load_and_transform_text(text_list, device),
-    ModalityType.VISION: data.load_and_transform_vision_data(image_paths, device),
-    ModalityType.AUDIO: data.load_and_transform_audio_data(audio_paths, device),
+    ModalityType.TEXT: data.load_and_transform_text(text_list),
+    ModalityType.VISION: data.load_and_transform_vision_data(image_paths),
+    # ModalityType.AUDIO: data.load_and_transform_audio_data(audio_paths),
 }
 
 embeddings = model(inputs)
@@ -27,14 +27,14 @@ print(
     "Vision x Text: ",
     ops.softmax(embeddings[ModalityType.VISION] @ embeddings[ModalityType.TEXT].T, axis=-1),
 )
-print(
-    "Audio x Text: ",
-    ops.softmax(embeddings[ModalityType.AUDIO] @ embeddings[ModalityType.TEXT].T, axis=-1),
-)
-print(
-    "Vision x Audio: ",
-    ops.softmax(embeddings[ModalityType.VISION] @ embeddings[ModalityType.AUDIO].T, axis=-1),
-)
+# print(
+#     "Audio x Text: ",
+#     ops.softmax(embeddings[ModalityType.AUDIO] @ embeddings[ModalityType.TEXT].T, axis=-1),
+# )
+# print(
+#     "Vision x Audio: ",
+#     ops.softmax(embeddings[ModalityType.VISION] @ embeddings[ModalityType.AUDIO].T, axis=-1),
+# )
 
 # Expected output:
 #

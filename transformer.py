@@ -175,12 +175,12 @@ class BlockWithMasking(nn.Cell):
         norm_1_x = self.norm_1(x)
         norm_2_x = self.norm_2(x)
         if self.layer_scale_type is None:
-            x = x + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask))
+            x = x + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask)[0])
             x = x + self.drop_path(self.mlp(norm_2_x))
         else:
             x = (
                 x
-                + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask))
+                + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask)[0])
                 * self.layer_scale_gamma1
             )
             x = x + self.drop_path(self.mlp(norm_2_x)) * self.layer_scale_gamma2
