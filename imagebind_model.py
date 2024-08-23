@@ -25,7 +25,7 @@ from multimodal_preprocessors import (
     ThermalPreprocessor,
 )
 
-from transformer import MultiheadAttention, SimpleTransformer
+from transformer import SimpleTransformer
 
 
 ModalityType = SimpleNamespace(
