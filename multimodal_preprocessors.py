@@ -325,7 +325,7 @@ class TextPreprocessor(VerboseNNModule):
         self.vocab_size = vocab_size
         self.context_length = context_length
         self.token_embedding = nn.Embedding(vocab_size, embed_dim)
-        self.pos_embed = nn.Parameter(
+        self.pos_embed = Parameter(
             ops.zeros(size=(1, self.context_length + num_cls_tokens, embed_dim))
         )
         self.causal_masking = causal_masking
@@ -337,7 +337,7 @@ class TextPreprocessor(VerboseNNModule):
         self.embed_dim = embed_dim
         if num_cls_tokens > 0:
             assert self.causal_masking is False, "Masking + CLS token isn't implemented"
-            self.cls_token = nn.Parameter(
+            self.cls_token = Parameter(
                 ops.zeros(size=(1, self.num_cls_tokens, embed_dim))
             )
 
@@ -606,12 +606,12 @@ class IMUPreprocessor(VerboseNNModule):
         self.use_pos_embed = pos_embed_fn is not None
         self.num_cls_tokens = num_cls_tokens
         self.kernel_size = kernel_size
-        self.pos_embed = nn.Parameter(
+        self.pos_embed = Parameter(
             ops.zeros(size=(1, (img_size[1] // kernel_size) + num_cls_tokens, embed_dim))
         )
 
         if self.num_cls_tokens > 0:
-            self.cls_token = nn.Parameter(
+            self.cls_token = Parameter(
                 ops.zeros(size=(1, self.num_cls_tokens, self.embed_dim))
             )
 

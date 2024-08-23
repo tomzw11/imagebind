@@ -1,6 +1,9 @@
 
 # imagebind
 
+## run demo
+> python demo.py
+
 ## todo
 - [x] 模型脚本迁移 100%
 - [ ] 推理脚本迁移 40%

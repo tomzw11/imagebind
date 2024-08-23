@@ -381,39 +381,39 @@ class ImageBindModel(nn.Cell):
         modality_heads[ModalityType.VISION] = nn.SequentialCell(
             nn.LayerNorm(normalized_shape=vision_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(vision_embed_dim, out_embed_dim, has_bias=False),
+            nn.Dense(vision_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.TEXT] = SelectEOSAndProject(
             proj=nn.SequentialCell(
                 nn.LayerNorm(normalized_shape=text_embed_dim, epsilon=1e-6),
-                nn.Linear(text_embed_dim, out_embed_dim, has_bias=False),
+                nn.Dense(text_embed_dim, out_embed_dim, has_bias=False),
             )
         )
 
         modality_heads[ModalityType.AUDIO] = nn.SequentialCell(
             nn.LayerNorm(normalized_shape=audio_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(audio_embed_dim, out_embed_dim, has_bias=False),
+            nn.Dense(audio_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.DEPTH] = nn.SequentialCell(
             nn.LayerNorm(normalized_shape=depth_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(depth_embed_dim, out_embed_dim, has_bias=False),
+            nn.Dense(depth_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.THERMAL] = nn.SequentialCell(
             nn.LayerNorm(normalized_shape=thermal_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
-            nn.Linear(thermal_embed_dim, out_embed_dim, has_bias=False),
+            nn.Dense(thermal_embed_dim, out_embed_dim, has_bias=False),
         )
 
         modality_heads[ModalityType.IMU] = nn.SequentialCell(
             nn.LayerNorm(normalized_shape=imu_embed_dim, epsilon=1e-6),
             SelectElement(index=0),
             nn.Dropout(p=0.5),
-            nn.Linear(imu_embed_dim, out_embed_dim, has_bias=False),
+            nn.Dense(imu_embed_dim, out_embed_dim, has_bias=False),
         )
 
         return nn.CellDict(modality_heads)
