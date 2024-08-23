@@ -60,6 +60,7 @@ class LearnableLogitScaling(nn.Cell):
         self.max_logit_scale = max_logit_scale
         self.logit_scale_init = logit_scale_init
         self.learnable = learnable
+        print("helpers LearnableLogitScaling TODO: fix compute type")
         log_logit_scale = ops.ones([]) * np.log(self.logit_scale_init)
         if learnable:
             self.log_logit_scale = Parameter(log_logit_scale)
