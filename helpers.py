@@ -63,7 +63,7 @@ class LearnableLogitScaling(nn.Cell):
         print("helpers LearnableLogitScaling TODO: fix compute type")
         log_logit_scale = ops.ones([]) * np.log(self.logit_scale_init)
         if learnable:
-            self.log_logit_scale = Parameter(log_logit_scale)
+            self.log_logit_scale = Parameter(log_logit_scale， requires_grad=True)
         else:
             self.log_logit_scale = Parameter(log_logit_scale， requires_grad=False)
 
