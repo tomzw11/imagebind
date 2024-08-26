@@ -101,7 +101,8 @@ def load_and_transform_vision_data(image_paths):
 
         image = data_transform(image)
         image_ouputs.append(Tensor(image))
-    return ops.unsqueeze(image_ouputs[0], 0)
+    # TODO: add multi samples
+    return image_ouputs[0]
 
 
 def load_and_transform_thermal_data(thermal_paths, device):

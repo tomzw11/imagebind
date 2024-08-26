@@ -119,11 +119,11 @@ class ImageBindModel(nn.Cell):
         )
 
         self.vision_head = self._create_vision_head(out_embed_dim, vision_embed_dim)
-        self.text_head = self._create_text_head(out_embed_dim, vision_embed_dim)
-        self.audio_head = self._create_audio_head(out_embed_dim, vision_embed_dim)
-        self.depth_head = self._create_depth_head(out_embed_dim, vision_embed_dim)
-        self.thermal_head = self._create_thermal_head(out_embed_dim, vision_embed_dim)
-        self.imu_head = self._create_imu_head(out_embed_dim, vision_embed_dim)
+        self.text_head = self._create_text_head(out_embed_dim, text_embed_dim)
+
+        self.vision_postprocessor = self._create_vision_postprocessor(out_embed_dim)
+        self.text_postprocessor = self._create_text_postprocessor(out_embed_dim)
+
 
     def _create_modality_preprocessors(
         self,
@@ -169,92 +169,92 @@ class ImageBindModel(nn.Cell):
             causal_masking=True,
         )
 
-        audio_stem = PatchEmbedGeneric(
-            proj_stem=[
-                nn.Conv2d(
-                    in_channels=1,
-                    kernel_size=audio_kernel_size,
-                    stride=audio_stride,
-                    out_channels=audio_embed_dim,
-                    has_bias=False,
-                ),
-            ],
-            norm_layer=nn.LayerNorm(normalized_shape=(audio_embed_dim,)),
-        )
-        audio_preprocessor = AudioPreprocessor(
-            img_size=[1, audio_num_mel_bins, audio_target_len],
-            num_cls_tokens=1,
-            pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
-            audio_stem=audio_stem,
-        )
+        # audio_stem = PatchEmbedGeneric(
+        #     proj_stem=[
+        #         nn.Conv2d(
+        #             in_channels=1,
+        #             kernel_size=audio_kernel_size,
+        #             stride=audio_stride,
+        #             out_channels=audio_embed_dim,
+        #             has_bias=False,
+        #         ),
+        #     ],
+        #     norm_layer=nn.LayerNorm(normalized_shape=(audio_embed_dim,)),
+        # )
+        # audio_preprocessor = AudioPreprocessor(
+        #     img_size=[1, audio_num_mel_bins, audio_target_len],
+        #     num_cls_tokens=1,
+        #     pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
+        #     audio_stem=audio_stem,
+        # )
 
-        depth_stem = PatchEmbedGeneric(
-            [
-                nn.Conv2d(
-                    kernel_size=depth_kernel_size,
-                    in_channels=1,
-                    out_channels=depth_embed_dim,
-                    stride=depth_kernel_size,
-                    has_bias=False,
-                ),
-            ],
-            norm_layer=nn.LayerNorm(normalized_shape=(depth_embed_dim,)),
-        )
+        # depth_stem = PatchEmbedGeneric(
+        #     [
+        #         nn.Conv2d(
+        #             kernel_size=depth_kernel_size,
+        #             in_channels=1,
+        #             out_channels=depth_embed_dim,
+        #             stride=depth_kernel_size,
+        #             has_bias=False,
+        #         ),
+        #     ],
+        #     norm_layer=nn.LayerNorm(normalized_shape=(depth_embed_dim,)),
+        # )
 
-        depth_preprocessor = RGBDTPreprocessor(
-            img_size=[1, 224, 224],
-            num_cls_tokens=1,
-            pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
-            rgbt_stem=None,
-            depth_stem=depth_stem,
-        )
+        # depth_preprocessor = RGBDTPreprocessor(
+        #     img_size=[1, 224, 224],
+        #     num_cls_tokens=1,
+        #     pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
+        #     rgbt_stem=None,
+        #     depth_stem=depth_stem,
+        # )
 
-        thermal_stem = PatchEmbedGeneric(
-            [
-                nn.Conv2d(
-                    kernel_size=thermal_kernel_size,
-                    in_channels=1,
-                    out_channels=thermal_embed_dim,
-                    stride=thermal_kernel_size,
-                    has_bias=False,
-                ),
-            ],
-            norm_layer=nn.LayerNorm(normalized_shape=(thermal_embed_dim,)),
-        )
-        thermal_preprocessor = ThermalPreprocessor(
-            img_size=[1, 224, 224],
-            num_cls_tokens=1,
-            pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
-            thermal_stem=thermal_stem,
-        )
+        # thermal_stem = PatchEmbedGeneric(
+        #     [
+        #         nn.Conv2d(
+        #             kernel_size=thermal_kernel_size,
+        #             in_channels=1,
+        #             out_channels=thermal_embed_dim,
+        #             stride=thermal_kernel_size,
+        #             has_bias=False,
+        #         ),
+        #     ],
+        #     norm_layer=nn.LayerNorm(normalized_shape=(thermal_embed_dim,)),
+        # )
+        # thermal_preprocessor = ThermalPreprocessor(
+        #     img_size=[1, 224, 224],
+        #     num_cls_tokens=1,
+        #     pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
+        #     thermal_stem=thermal_stem,
+        # )
 
-        imu_stem = PatchEmbedGeneric(
-            [
-                nn.Dense(
-                    in_channels=48,
-                    out_channels=imu_embed_dim,
-                    has_bias=False,
-                ),
-            ],
-            norm_layer=nn.LayerNorm(normalized_shape=(imu_embed_dim,)),
-        )
+        # imu_stem = PatchEmbedGeneric(
+        #     [
+        #         nn.Dense(
+        #             in_channels=48,
+        #             out_channels=imu_embed_dim,
+        #             has_bias=False,
+        #         ),
+        #     ],
+        #     norm_layer=nn.LayerNorm(normalized_shape=(imu_embed_dim,)),
+        # )
 
-        imu_preprocessor = IMUPreprocessor(
-            img_size=[6, 2000],
-            num_cls_tokens=1,
-            kernel_size=8,
-            embed_dim=imu_embed_dim,
-            pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
-            imu_stem=imu_stem,
-        )
+        # imu_preprocessor = IMUPreprocessor(
+        #     img_size=[6, 2000],
+        #     num_cls_tokens=1,
+        #     kernel_size=8,
+        #     embed_dim=imu_embed_dim,
+        #     pos_embed_fn=partial(SpatioTemporalPosEmbeddingHelper, learnable=True),
+        #     imu_stem=imu_stem,
+        # )
 
         modality_preprocessors = {
             ModalityType.VISION: rgbt_preprocessor,
             ModalityType.TEXT: text_preprocessor,
-            ModalityType.AUDIO: audio_preprocessor,
-            ModalityType.DEPTH: depth_preprocessor,
-            ModalityType.THERMAL: thermal_preprocessor,
-            ModalityType.IMU: imu_preprocessor,
+            # ModalityType.AUDIO: audio_preprocessor,
+            # ModalityType.DEPTH: depth_preprocessor,
+            # ModalityType.THERMAL: thermal_preprocessor,
+            # ModalityType.IMU: imu_preprocessor,
         }
 
         return nn.CellDict(modality_preprocessors)
@@ -324,38 +324,38 @@ class ImageBindModel(nn.Cell):
             add_bias_kv=False,
             drop_path=0.0,
         )
-        modality_trunks[ModalityType.AUDIO] = instantiate_trunk(
-            audio_embed_dim,
-            audio_num_blocks,
-            audio_num_heads,
-            pre_transformer_ln=False,
-            add_bias_kv=True,
-            drop_path=audio_drop_path,
-        )
-        modality_trunks[ModalityType.DEPTH] = instantiate_trunk(
-            depth_embed_dim,
-            depth_num_blocks,
-            depth_num_heads,
-            pre_transformer_ln=False,
-            add_bias_kv=True,
-            drop_path=depth_drop_path,
-        )
-        modality_trunks[ModalityType.THERMAL] = instantiate_trunk(
-            thermal_embed_dim,
-            thermal_num_blocks,
-            thermal_num_heads,
-            pre_transformer_ln=False,
-            add_bias_kv=True,
-            drop_path=thermal_drop_path,
-        )
-        modality_trunks[ModalityType.IMU] = instantiate_trunk(
-            imu_embed_dim,
-            imu_num_blocks,
-            imu_num_heads,
-            pre_transformer_ln=False,
-            add_bias_kv=True,
-            drop_path=imu_drop_path,
-        )
+        # modality_trunks[ModalityType.AUDIO] = instantiate_trunk(
+        #     audio_embed_dim,
+        #     audio_num_blocks,
+        #     audio_num_heads,
+        #     pre_transformer_ln=False,
+        #     add_bias_kv=True,
+        #     drop_path=audio_drop_path,
+        # )
+        # modality_trunks[ModalityType.DEPTH] = instantiate_trunk(
+        #     depth_embed_dim,
+        #     depth_num_blocks,
+        #     depth_num_heads,
+        #     pre_transformer_ln=False,
+        #     add_bias_kv=True,
+        #     drop_path=depth_drop_path,
+        # )
+        # modality_trunks[ModalityType.THERMAL] = instantiate_trunk(
+        #     thermal_embed_dim,
+        #     thermal_num_blocks,
+        #     thermal_num_heads,
+        #     pre_transformer_ln=False,
+        #     add_bias_kv=True,
+        #     drop_path=thermal_drop_path,
+        # )
+        # modality_trunks[ModalityType.IMU] = instantiate_trunk(
+        #     imu_embed_dim,
+        #     imu_num_blocks,
+        #     imu_num_heads,
+        #     pre_transformer_ln=False,
+        #     add_bias_kv=True,
+        #     drop_path=imu_drop_path,
+        # )
 
         return nn.CellDict(modality_trunks)
 
@@ -382,30 +382,30 @@ class ImageBindModel(nn.Cell):
             )
         )
 
-    def _create_audio_head(
-        self,
-        out_embed_dim,
-        audio_embed_dim,
-    ):
-        return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=(audio_embed_dim,), epsilon=1e-6),
-            SelectElement(index=0),
-            nn.Dense(audio_embed_dim, out_embed_dim, has_bias=False),
-        )
+    # def _create_audio_head(
+    #     self,
+    #     out_embed_dim,
+    #     audio_embed_dim,
+    # ):
+    #     return nn.SequentialCell(
+    #         nn.LayerNorm(normalized_shape=(audio_embed_dim,), epsilon=1e-6),
+    #         SelectElement(index=0),
+    #         nn.Dense(audio_embed_dim, out_embed_dim, has_bias=False),
+    #     )
 
-    def vision_postprocessor(self, out_embed_dim):
+    def _create_vision_postprocessor(self, out_embed_dim):
         return Normalize(dim=-1)
 
-    def text_postprocessor(self, out_embed_dim):
+    def _create_text_postprocessor(self, out_embed_dim):
         return nn.SequentialCell(
             Normalize(dim=-1), LearnableLogitScaling(learnable=True)
         )
 
-    def audio_postprocessor(self, out_embed_dim):
-        return nn.SequentialCell(
-            Normalize(dim=-1),
-            LearnableLogitScaling(logit_scale_init=20.0, learnable=False),
-        )
+    # def audio_postprocessor(self, out_embed_dim):
+    #     return nn.SequentialCell(
+    #         Normalize(dim=-1),
+    #         LearnableLogitScaling(logit_scale_init=20.0, learnable=False),
+    #     )
 
     def construct(self, inputs):
         outputs = {}
