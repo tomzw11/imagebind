@@ -231,8 +231,8 @@ class ImageBindModel(nn.Cell):
         imu_stem = PatchEmbedGeneric(
             [
                 nn.Dense(
-                    in_features=48,
-                    out_features=imu_embed_dim,
+                    in_channels=48,
+                    out_channels=imu_embed_dim,
                     has_bias=False,
                 ),
             ],
@@ -299,7 +299,7 @@ class ImageBindModel(nn.Cell):
                     add_bias_kv=add_bias_kv,
                 ),
                 pre_transformer_layer=nn.SequentialCell(
-                    nn.LayerNorm(embed_dim, epsilon=1e-6)
+                    nn.LayerNorm((embed_dim,), epsilon=1e-6)
                     if pre_transformer_ln
                     else nn.Identity(),
                     EinOpsRearrange("b l d -> l b d"),
@@ -365,7 +365,7 @@ class ImageBindModel(nn.Cell):
         vision_embed_dim,
     ):
         return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=vision_embed_dim, epsilon=1e-6),
+            nn.LayerNorm(normalized_shape=(vision_embed_dim,), epsilon=1e-6),
             SelectElement(index=0),
             nn.Dense(vision_embed_dim, out_embed_dim, has_bias=False),
         )
@@ -377,7 +377,7 @@ class ImageBindModel(nn.Cell):
     ):
         return SelectEOSAndProject(
             proj=nn.SequentialCell(
-                nn.LayerNorm(normalized_shape=text_embed_dim, epsilon=1e-6),
+                nn.LayerNorm(normalized_shape=(text_embed_dim,), epsilon=1e-6),
                 nn.Dense(text_embed_dim, out_embed_dim, has_bias=False),
             )
         )
@@ -388,54 +388,20 @@ class ImageBindModel(nn.Cell):
         audio_embed_dim,
     ):
         return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=audio_embed_dim, epsilon=1e-6),
+            nn.LayerNorm(normalized_shape=(audio_embed_dim,), epsilon=1e-6),
             SelectElement(index=0),
             nn.Dense(audio_embed_dim, out_embed_dim, has_bias=False),
         )
 
-    # def _create_depth_head(
-    #     self,
-    #     out_embed_dim,
-    #     depth_embed_dim,
-    # ):
-    #     return nn.SequentialCell(
-    #         nn.LayerNorm(normalized_shape=depth_embed_dim, epsilon=1e-6),
-    #         SelectElement(index=0),
-    #         nn.Dense(depth_embed_dim, out_embed_dim, has_bias=False),
-    #     )
-
-    # def _create_thermal_head(
-    #     self,
-    #     out_embed_dim,
-    #     thermal_embed_dim,
-    # ):
-    #     return nn.SequentialCell(
-    #         nn.LayerNorm(normalized_shape=thermal_embed_dim, epsilon=1e-6),
-    #         SelectElement(index=0),
-    #         nn.Dense(thermal_embed_dim, out_embed_dim, has_bias=False),
-    #     )
-
-    # def _create_imu_head(
-    #     self,
-    #     out_embed_dim,
-    #     depth_embed_dim,
-    # ):
-    #     return nn.SequentialCell(
-    #         nn.LayerNorm(normalized_shape=imu_embed_dim, epsilon=1e-6),
-    #         SelectElement(index=0),
-    #         nn.Dropout(p=0.5),
-    #         nn.Dense(imu_embed_dim, out_embed_dim, has_bias=False),
-    #     )
-
-    def _create_vision_postprocessor(self, out_embed_dim):
+    def vision_postprocessor(self, out_embed_dim):
         return Normalize(dim=-1)
 
-    def _create_text_postprocessor(self, out_embed_dim):
+    def text_postprocessor(self, out_embed_dim):
         return nn.SequentialCell(
             Normalize(dim=-1), LearnableLogitScaling(learnable=True)
         )
 
-    def _create_audio_postprocessor(self, out_embed_dim):
+    def audio_postprocessor(self, out_embed_dim):
         return nn.SequentialCell(
             Normalize(dim=-1),
             LearnableLogitScaling(logit_scale_init=20.0, learnable=False),
@@ -463,13 +429,13 @@ class ImageBindModel(nn.Cell):
 
                 if modality_key in [ModalityType.VISION]:
                     modality_value = self.vision_head(modality_value, **head_inputs)
-                    modality_value = self._create_vision_postprocessor(modality_value)
+                    modality_value = self.vision_postprocessor(modality_value)
                 elif modality_key in [ModalityType.TEXT]:
                     modality_value = self.text_head(modality_value, **head_inputs)
-                    modality_value = self._create_text_postprocessor(modality_value)
+                    modality_value = self.text_postprocessor(modality_value)
                 elif modality_key in [ModalityType.AUDIO]:
                     modality_value = self.audio_head(modality_value, **head_inputs)
-                    modality_value = self._create_audio_postprocessor[0](modality_value)
+                    modality_value = self.audio_postprocessor[0](modality_value)
                 else:
                     print("modality head not implemented yet")
 
