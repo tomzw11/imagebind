@@ -125,11 +125,6 @@ class ImageBindModel(nn.Cell):
         self.thermal_head = self._create_thermal_head(out_embed_dim, vision_embed_dim)
         self.imu_head = self._create_imu_head(out_embed_dim, vision_embed_dim)
 
-
-        self.modality_postprocessors = self._create_modality_postprocessors(
-            out_embed_dim
-        )
-
     def _create_modality_preprocessors(
         self,
         video_frames=2,
@@ -398,64 +393,53 @@ class ImageBindModel(nn.Cell):
             nn.Dense(audio_embed_dim, out_embed_dim, has_bias=False),
         )
 
-    def _create_depth_head(
-        self,
-        out_embed_dim,
-        depth_embed_dim,
-    ):
+    # def _create_depth_head(
+    #     self,
+    #     out_embed_dim,
+    #     depth_embed_dim,
+    # ):
+    #     return nn.SequentialCell(
+    #         nn.LayerNorm(normalized_shape=depth_embed_dim, epsilon=1e-6),
+    #         SelectElement(index=0),
+    #         nn.Dense(depth_embed_dim, out_embed_dim, has_bias=False),
+    #     )
+
+    # def _create_thermal_head(
+    #     self,
+    #     out_embed_dim,
+    #     thermal_embed_dim,
+    # ):
+    #     return nn.SequentialCell(
+    #         nn.LayerNorm(normalized_shape=thermal_embed_dim, epsilon=1e-6),
+    #         SelectElement(index=0),
+    #         nn.Dense(thermal_embed_dim, out_embed_dim, has_bias=False),
+    #     )
+
+    # def _create_imu_head(
+    #     self,
+    #     out_embed_dim,
+    #     depth_embed_dim,
+    # ):
+    #     return nn.SequentialCell(
+    #         nn.LayerNorm(normalized_shape=imu_embed_dim, epsilon=1e-6),
+    #         SelectElement(index=0),
+    #         nn.Dropout(p=0.5),
+    #         nn.Dense(imu_embed_dim, out_embed_dim, has_bias=False),
+    #     )
+
+    def _create_vision_postprocessor(self, out_embed_dim):
+        return Normalize(dim=-1)
+
+    def _create_text_postprocessor(self, out_embed_dim):
         return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=depth_embed_dim, epsilon=1e-6),
-            SelectElement(index=0),
-            nn.Dense(depth_embed_dim, out_embed_dim, has_bias=False),
-        )
-
-    def _create_thermal_head(
-        self,
-        out_embed_dim,
-        thermal_embed_dim,
-    ):
-        return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=thermal_embed_dim, epsilon=1e-6),
-            SelectElement(index=0),
-            nn.Dense(thermal_embed_dim, out_embed_dim, has_bias=False),
-        )
-
-    def _create_imu_head(
-        self,
-        out_embed_dim,
-        depth_embed_dim,
-    ):
-        return nn.SequentialCell(
-            nn.LayerNorm(normalized_shape=imu_embed_dim, epsilon=1e-6),
-            SelectElement(index=0),
-            nn.Dropout(p=0.5),
-            nn.Dense(imu_embed_dim, out_embed_dim, has_bias=False),
-        )
-
-    def _create_modality_postprocessors(self, out_embed_dim):
-        modality_postprocessors = {}
-
-        modality_postprocessors[ModalityType.VISION] = Normalize(dim=-1)
-        modality_postprocessors[ModalityType.TEXT] = nn.SequentialCell(
             Normalize(dim=-1), LearnableLogitScaling(learnable=True)
         )
-        modality_postprocessors[ModalityType.AUDIO] = nn.SequentialCell(
+
+    def _create_audio_postprocessor(self, out_embed_dim):
+        return nn.SequentialCell(
             Normalize(dim=-1),
             LearnableLogitScaling(logit_scale_init=20.0, learnable=False),
         )
-        modality_postprocessors[ModalityType.DEPTH] = nn.SequentialCell(
-            Normalize(dim=-1),
-            LearnableLogitScaling(logit_scale_init=5.0, learnable=False),
-        )
-        modality_postprocessors[ModalityType.THERMAL] = nn.SequentialCell(
-            Normalize(dim=-1),
-            LearnableLogitScaling(logit_scale_init=10.0, learnable=False),
-        )
-        modality_postprocessors[ModalityType.IMU] = nn.SequentialCell(
-            Normalize(dim=-1),
-            LearnableLogitScaling(logit_scale_init=5.0, learnable=False),
-        )
-        return nn.CellDict(modality_postprocessors)
 
     def construct(self, inputs):
         outputs = {}
@@ -477,28 +461,17 @@ class ImageBindModel(nn.Cell):
                 head_inputs = modality_value["head"]
                 modality_value = self.modality_trunks[modality_key](**trunk_inputs)
 
-
-                #0819 makeshift head definition because celldict(sequentialcell) is not supported.
-                # modality_value = self.modality_heads[modality_key](
-                #     modality_value, **head_inputs
-                # )
-                if modality_key=="VISION":
+                if modality_key in [ModalityType.VISION]:
                     modality_value = self.vision_head(modality_value, **head_inputs)
-                elif modality_key=="TEXT":
+                    modality_value = self._create_vision_postprocessor(modality_value)
+                elif modality_key in [ModalityType.TEXT]:
                     modality_value = self.text_head(modality_value, **head_inputs)
-                elif modality_key=="AUDIO":
+                    modality_value = self._create_text_postprocessor(modality_value)
+                elif modality_key in [ModalityType.AUDIO]:
                     modality_value = self.audio_head(modality_value, **head_inputs)
+                    modality_value = self._create_audio_postprocessor[0](modality_value)
                 else:
                     print("modality head not implemented yet")
-
-                if modality_key in [ModalityType.AUDIO]:
-                    modality_value = self.modality_postprocessors[modality_key][0](
-                        modality_value
-                    )
-                else:
-                    modality_value = self.modality_postprocessors[modality_key](
-                        modality_value
-                    )
 
                 if reduce_list:
                     modality_value = modality_value.reshape(B, S, -1)
