@@ -172,17 +172,21 @@ class BlockWithMasking(nn.Cell):
             )
 
     def construct(self, x: ms.Tensor, attn_mask: ms.Tensor):
-        norm_1_x = self.norm_1(x)
-        norm_2_x = self.norm_2(x)
+
         if self.layer_scale_type is None:
+
+            norm_1_x = self.norm_1(x)
             x = x + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask)[0])
+            norm_2_x = self.norm_2(x)
             x = x + self.drop_path(self.mlp(norm_2_x))
         else:
+            norm_1_x = self.norm_1(x)
             x = (
                 x
                 + self.drop_path(self.attn(norm_1_x, norm_1_x, norm_1_x, attn_mask)[0])
                 * self.layer_scale_gamma1
             )
+            norm_2_x = self.norm_2(x)
             x = x + self.drop_path(self.mlp(norm_2_x)) * self.layer_scale_gamma2
         return x
 

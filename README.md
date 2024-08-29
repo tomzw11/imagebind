@@ -9,9 +9,8 @@
 - [ ] 推理脚本迁移 40%
 	- [x] text
 	- [x] image
-	- [ ] video(torchvideo组件)
-	- [ ] audio(torchaudio组件)
-	- [ ] depth/IMU
+	- [ ] video预处理(torchvideo组件)
+	- [ ] audio预处理(torchaudio组件)
 - [ ] 交叉模态encode精度对比 15%
 	- [ ] text x image
 	- [ ] text x audio
@@ -110,5 +109,5 @@
 		_create_modality_trucks
 		_create_modality_heads
 		_create_modality_postprocessors
-			nn.celllist不支持保存sequentialcelllist,需要改写
+			nn.celllist不支持保存sequentialcelllist,已经解耦preprocessor/head/postprocessor
 #### imagebind_huge
